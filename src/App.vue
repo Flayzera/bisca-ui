@@ -28,7 +28,11 @@ import GameTable from './components/GameTable.vue';
 import JoinForm from './components/JoinForm.vue';
 import type { GameState, Player } from './types';
 
-const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
+const isLocal = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1'
+);
+const serverUrl = isLocal ? 'http://localhost:3000' : (import.meta.env.VITE_SERVER_URL || '');
 console.log('[FRONTEND] Inicializando socket com URL:', serverUrl);
 
 const socket = ref<Socket>(io(serverUrl, {
