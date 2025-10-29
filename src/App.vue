@@ -39,7 +39,7 @@ const socket = ref<Socket>(io(serverUrl, {
   path: '/bisca-socket',
   transports: ['polling'],
   upgrade: false,
-  timeout: 30000,
+  timeout: 10000, // Reduzido de 30s para 10s para detectar problemas mais rápido
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionAttempts: 20,
@@ -78,6 +78,11 @@ onMounted(() => {
   
   socket.value.on('connecting', () => {
     console.log('[FRONTEND] Socket conectando...');
+    console.log('[FRONTEND] Configuração:', {
+      url: serverUrl,
+      path: '/bisca-socket',
+      transports: ['polling']
+    });
   });
   
   socket.value.on('disconnect', (reason) => {
@@ -92,6 +97,18 @@ onMounted(() => {
     console.error('[FRONTEND] Erro de conexão:', error.message);
     if (error.type) console.error('[FRONTEND] Tipo do erro:', error.type);
     if (error.description) console.error('[FRONTEND] Descrição:', error.description);
+    console.error('[FRONTEND] Erro completo:', error);
+    
+    // Tentar verificar se a URL está acessível
+    fetch(`${serverUrl}/health`)
+      .then(res => res.json())
+      .then(data => {
+        console.log('[FRONTEND] Health check OK:', data);
+      })
+      .catch(err => {
+        console.error('[FRONTEND] Health check FALHOU:', err);
+        console.error('[FRONTEND] Isso indica que o backend não está acessível na URL:', serverUrl);
+      });
   });
   
   socket.value.on('reconnect', (attemptNumber) => {
@@ -117,6 +134,19 @@ onMounted(() => {
   if (!socket.value.connected) {
     console.log('[FRONTEND] Socket não conectado, tentando conectar...');
     socket.value.connect();
+    
+    // Timeout de segurança: se não conectar em 15s, mostrar erro
+    setTimeout(() => {
+      if (!socket.value.connected) {
+        console.error('[FRONTEND] TIMEOUT: Socket não conectou após 15 segundos');
+        console.error('[FRONTEND] Estado do socket:', {
+          connected: socket.value.connected,
+          disconnected: socket.value.disconnected,
+          id: socket.value.id
+        });
+        alert('Não foi possível conectar ao servidor. Verifique se o backend está rodando e se a URL está correta.');
+      }
+    }, 15000);
   }
   
   socket.value.on('gameState', (state: GameState) => {
