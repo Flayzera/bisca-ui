@@ -23,7 +23,18 @@ import JoinForm from './components/JoinForm.vue';
 import type { GameState, Player } from './types';
 
 const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const socket = ref<Socket>(io(serverUrl));
+const socket = ref<Socket>(io(serverUrl, {
+  extraHeaders: {
+    'bypass-tunnel-reminder': '1'
+  },
+  transportOptions: {
+    polling: {
+      extraHeaders: {
+        'bypass-tunnel-reminder': '1'
+      }
+    }
+  }
+}));
 const socketId = ref<string>('');
 const gameState = ref<GameState>({ 
   players: [], 
