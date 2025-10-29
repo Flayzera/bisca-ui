@@ -84,8 +84,15 @@ onMounted(() => {
 
 function joinGame(nickname: string) {
   if (!nickname) return alert('Digite um apelido!');
-  if (joined.value) return; // Já está no jogo
+  if (joined.value) {
+    console.log('[FRONTEND] Tentativa de join ignorada - já está no jogo');
+    return; // Já está no jogo
+  }
+  console.log('[FRONTEND] Tentando entrar no jogo:', nickname);
+  console.log('[FRONTEND] Socket conectado?', socket.value.connected);
+  console.log('[FRONTEND] Socket ID:', socket.value.id);
   socket.value.emit('joinGame', nickname);
+  console.log('[FRONTEND] Evento joinGame emitido');
   joined.value = true;
 }
 
