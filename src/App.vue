@@ -30,24 +30,18 @@ import type { GameState, Player } from './types';
 
 const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
 const socket = ref<Socket>(io(serverUrl, {
-  extraHeaders: {
-    'bypass-tunnel-reminder': '1'
-  },
+  extraHeaders: { 'bypass-tunnel-reminder': '1' },
   transportOptions: {
-    polling: {
-      extraHeaders: {
-        'bypass-tunnel-reminder': '1'
-      }
-    }
+    polling: { extraHeaders: { 'bypass-tunnel-reminder': '1' } }
   },
-  // Tentar websocket primeiro, depois polling
-  transports: ['websocket', 'polling'],
-  // Aumentar timeout para conexões via túnel
-  timeout: 20000,
-  // Reconnect automático
+  // Forçar HTTP polling primeiro (mais estável no LocalTunnel) e desabilitar upgrade
+  transports: ['polling'],
+  upgrade: false,
+  // Timeouts e reconexão mais tolerantes
+  timeout: 30000,
   reconnection: true,
-  reconnectionDelay: 1000,
-  reconnectionAttempts: 5
+  reconnectionDelay: 1500,
+  reconnectionAttempts: 20,
 }));
 const socketId = ref<string>('');
 const gameState = ref<GameState>({ 
