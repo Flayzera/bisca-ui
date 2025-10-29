@@ -40,7 +40,9 @@ const socket = ref<Socket>(io(serverUrl, {
   timeout: 30000,
   reconnection: true,
   reconnectionDelay: 1000,
-  reconnectionAttempts: 10,
+  reconnectionAttempts: 20,
+  reconnectionDelayMax: 5000,
+  randomizationFactor: 0.5,
 }));
 
 const socketId = ref<string>('');
@@ -66,12 +68,21 @@ onMounted(() => {
     console.log('[FRONTEND] Socket conectado:', socketId.value);
   });
   
-  socket.value.on('disconnect', () => {
-    console.log('[FRONTEND] Socket desconectado');
+  socket.value.on('disconnect', (reason) => {
+    console.log('[FRONTEND] Socket desconectado, motivo:', reason);
+    if (reason === 'io server disconnect') {
+      // Server disconnected, reconnect manually
+      socket.value.connect();
+    }
   });
   
   socket.value.on('connect_error', (error) => {
     console.error('[FRONTEND] Erro de conexão:', error.message);
+  });
+  
+  socket.value.on('reconnect', (attemptNumber) => {
+    console.log('[FRONTEND] Reconectado após', attemptNumber, 'tentativas');
+    socketId.value = socket.value.id || '';
   });
   
   socketId.value = socket.value.id || '';
@@ -86,10 +97,13 @@ onMounted(() => {
   socket.value.on('playersUpdate', (list: Player[]) => {
     players.value = list;
     console.log('[FRONTEND] playersUpdate:', list.map(p => p.nickname).join(', '));
-    if (!joined.value && list.some(p => p.id === socketId.value)) {
+    const isInList = list.some(p => p.id === socketId.value);
+    if (isInList && !joined.value) {
+      console.log('[FRONTEND] Jogador confirmado na lista, marcando como joined');
       joined.value = true;
     }
-    if (joined.value && !list.some(p => p.id === socketId.value)) {
+    if (!isInList && joined.value) {
+      console.log('[FRONTEND] Jogador não está mais na lista');
       joined.value = false;
     }
   });
@@ -100,6 +114,7 @@ onMounted(() => {
   });
   
   socket.value.on('roomError', (msg: string) => {
+    console.error('[FRONTEND] roomError:', msg);
     alert(msg);
     joined.value = false;
   });
@@ -113,6 +128,7 @@ onMounted(() => {
     roomCapacity.value = payload.capacity;
     ownerId.value = socketId.value;
     console.log('[FRONTEND] Sala criada:', payload.roomId);
+    // Não marcar joined aqui, esperar playersUpdate
   });
   
   socket.value.on('roomJoined', (payload: { roomId: string; capacity: number; ownerId: string }) => {
@@ -120,6 +136,7 @@ onMounted(() => {
     roomCapacity.value = payload.capacity;
     ownerId.value = payload.ownerId;
     console.log('[FRONTEND] Entrou na sala:', payload.roomId);
+    // Não marcar joined aqui, esperar playersUpdate
   });
   
   socket.value.on('gameFinished', () => {
@@ -128,19 +145,46 @@ onMounted(() => {
   });
 });
 
+// Helper para garantir que o socket esteja conectado antes de emitir
+async function ensureConnected(): Promise<boolean> {
+  if (socket.value.connected) {
+    return true;
+  }
+  
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      console.error('[FRONTEND] Timeout aguardando conexão');
+      resolve(false);
+    }, 10000);
+    
+    socket.value.once('connect', () => {
+      clearTimeout(timeout);
+      console.log('[FRONTEND] Conexão estabelecida após espera');
+      resolve(true);
+    });
+    
+    // Se já está conectando, também esperar
+    if (socket.value.disconnected) {
+      socket.value.connect();
+    }
+  });
+}
+
 function createRoom(payload: { nickname: string; capacity: number }) {
   if (!payload.nickname) {
     alert('Digite um apelido!');
     return;
   }
   console.log('[FRONTEND] Criando sala... conectado:', socket.value.connected);
-  if (socket.value.connected) {
-    socket.value.emit('createRoom', { capacity: payload.capacity, nickname: payload.nickname });
-  } else {
-    socket.value.once('connect', () => {
+  
+  ensureConnected().then((connected) => {
+    if (connected) {
       socket.value.emit('createRoom', { capacity: payload.capacity, nickname: payload.nickname });
-    });
-  }
+      console.log('[FRONTEND] Evento createRoom emitido');
+    } else {
+      alert('Não foi possível conectar ao servidor. Tente novamente.');
+    }
+  });
 }
 
 function joinRoom(payload: { nickname: string; roomId: string }) {
@@ -153,13 +197,15 @@ function joinRoom(payload: { nickname: string; roomId: string }) {
     return;
   }
   console.log('[FRONTEND] Entrando na sala... conectado:', socket.value.connected);
-  if (socket.value.connected) {
-    socket.value.emit('joinRoom', { roomId: payload.roomId, nickname: payload.nickname });
-  } else {
-    socket.value.once('connect', () => {
+  
+  ensureConnected().then((connected) => {
+    if (connected) {
       socket.value.emit('joinRoom', { roomId: payload.roomId, nickname: payload.nickname });
-    });
-  }
+      console.log('[FRONTEND] Evento joinRoom emitido');
+    } else {
+      alert('Não foi possível conectar ao servidor. Tente novamente.');
+    }
+  });
 }
 
 function playCard(card: string) {
