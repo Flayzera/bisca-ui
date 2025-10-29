@@ -48,12 +48,27 @@ const gameState = ref<GameState>({
 const players = ref<Player[]>([]);
 const joined = ref(false);
 
+const socketConnected = ref(false);
+
 onMounted(() => {
-  socketId.value = socket.value.id || '';
-  
   socket.value.on('connect', () => {
     socketId.value = socket.value.id || '';
+    socketConnected.value = true;
+    console.log('[FRONTEND] Socket conectado! ID:', socketId.value);
   });
+  
+  socket.value.on('disconnect', () => {
+    socketConnected.value = false;
+    console.log('[FRONTEND] Socket desconectado!');
+  });
+  
+  socket.value.on('connect_error', (error) => {
+    console.error('[FRONTEND] Erro de conexão:', error);
+    socketConnected.value = false;
+  });
+  
+  socketId.value = socket.value.id || '';
+  socketConnected.value = socket.value.connected;
   
   socket.value.on('gameState', (state: GameState) => {
     gameState.value = state;
@@ -64,8 +79,10 @@ onMounted(() => {
   });
   socket.value.on('playersUpdate', (list: Player[]) => {
     players.value = list;
+    console.log('[FRONTEND] playersUpdate recebido:', list.map(p => p.nickname));
     // Verificar se este jogador ainda está na lista
     if (joined.value && !list.some(p => p.id === socketId.value)) {
+      console.log('[FRONTEND] Jogador removido da lista!');
       joined.value = false;
     }
   });
@@ -88,9 +105,25 @@ function joinGame(nickname: string) {
     console.log('[FRONTEND] Tentativa de join ignorada - já está no jogo');
     return; // Já está no jogo
   }
+  
   console.log('[FRONTEND] Tentando entrar no jogo:', nickname);
   console.log('[FRONTEND] Socket conectado?', socket.value.connected);
+  console.log('[FRONTEND] socketConnected ref?', socketConnected.value);
   console.log('[FRONTEND] Socket ID:', socket.value.id);
+  
+  // Garantir que está conectado antes de enviar
+  if (!socket.value.connected && !socketConnected.value) {
+    console.log('[FRONTEND] Socket não conectado ainda, aguardando...');
+    socket.value.once('connect', () => {
+      console.log('[FRONTEND] Socket conectou após aguardar, enviando joinGame');
+      socketId.value = socket.value.id || '';
+      socket.value.emit('joinGame', nickname);
+      console.log('[FRONTEND] Evento joinGame emitido (após aguardar conexão)');
+      joined.value = true;
+    });
+    return;
+  }
+  
   socket.value.emit('joinGame', nickname);
   console.log('[FRONTEND] Evento joinGame emitido');
   joined.value = true;
