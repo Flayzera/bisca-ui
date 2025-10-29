@@ -29,6 +29,8 @@ import JoinForm from './components/JoinForm.vue';
 import type { GameState, Player } from './types';
 
 const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
+console.log('[FRONTEND] Inicializando socket com URL:', serverUrl);
+
 const socket = ref<Socket>(io(serverUrl, {
   extraHeaders: { 'bypass-tunnel-reminder': '1' },
   transportOptions: {
@@ -43,7 +45,11 @@ const socket = ref<Socket>(io(serverUrl, {
   reconnectionAttempts: 20,
   reconnectionDelayMax: 5000,
   randomizationFactor: 0.5,
+  autoConnect: true,
+  forceNew: false,
 }));
+
+console.log('[FRONTEND] Socket criado, estado inicial:', socket.value.connected ? 'conectado' : 'desconectado');
 
 const socketId = ref<string>('');
 const gameState = ref<GameState>({ 
@@ -63,9 +69,15 @@ const ownerId = ref<string>('');
 const isOwner = computed(() => ownerId.value && ownerId.value === socketId.value);
 
 onMounted(() => {
+  console.log('[FRONTEND] onMounted - Socket estado:', socket.value.connected ? 'conectado' : 'desconectado');
+  
   socket.value.on('connect', () => {
     socketId.value = socket.value.id || '';
     console.log('[FRONTEND] Socket conectado:', socketId.value);
+  });
+  
+  socket.value.on('connecting', () => {
+    console.log('[FRONTEND] Socket conectando...');
   });
   
   socket.value.on('disconnect', (reason) => {
@@ -76,8 +88,10 @@ onMounted(() => {
     }
   });
   
-  socket.value.on('connect_error', (error) => {
+  socket.value.on('connect_error', (error: Error & { type?: string; description?: string }) => {
     console.error('[FRONTEND] Erro de conexão:', error.message);
+    if (error.type) console.error('[FRONTEND] Tipo do erro:', error.type);
+    if (error.description) console.error('[FRONTEND] Descrição:', error.description);
   });
   
   socket.value.on('reconnect', (attemptNumber) => {
@@ -85,7 +99,25 @@ onMounted(() => {
     socketId.value = socket.value.id || '';
   });
   
+  socket.value.on('reconnect_attempt', (attemptNumber) => {
+    console.log('[FRONTEND] Tentativa de reconexão:', attemptNumber);
+  });
+  
+  socket.value.on('reconnect_error', (error) => {
+    console.error('[FRONTEND] Erro na reconexão:', error.message);
+  });
+  
+  socket.value.on('reconnect_failed', () => {
+    console.error('[FRONTEND] Falha na reconexão após todas as tentativas');
+  });
+  
   socketId.value = socket.value.id || '';
+  
+  // Forçar tentativa de conexão se não estiver conectado
+  if (!socket.value.connected) {
+    console.log('[FRONTEND] Socket não conectado, tentando conectar...');
+    socket.value.connect();
+  }
   
   socket.value.on('gameState', (state: GameState) => {
     gameState.value = state;
@@ -148,23 +180,27 @@ onMounted(() => {
 // Helper para garantir que o socket esteja conectado antes de emitir
 async function ensureConnected(): Promise<boolean> {
   if (socket.value.connected) {
+    console.log('[FRONTEND] ensureConnected: Já conectado');
     return true;
   }
   
+  console.log('[FRONTEND] ensureConnected: Aguardando conexão...');
+  
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      console.error('[FRONTEND] Timeout aguardando conexão');
+      console.error('[FRONTEND] ensureConnected: Timeout aguardando conexão após 10s');
       resolve(false);
     }, 10000);
     
     socket.value.once('connect', () => {
       clearTimeout(timeout);
-      console.log('[FRONTEND] Conexão estabelecida após espera');
+      console.log('[FRONTEND] ensureConnected: Conexão estabelecida após espera');
       resolve(true);
     });
     
     // Se já está conectando, também esperar
     if (socket.value.disconnected) {
+      console.log('[FRONTEND] ensureConnected: Forçando tentativa de conexão');
       socket.value.connect();
     }
   });
