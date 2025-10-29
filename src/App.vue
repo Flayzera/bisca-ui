@@ -33,7 +33,15 @@ const socket = ref<Socket>(io(serverUrl, {
         'bypass-tunnel-reminder': '1'
       }
     }
-  }
+  },
+  // Tentar websocket primeiro, depois polling
+  transports: ['websocket', 'polling'],
+  // Aumentar timeout para conexões via túnel
+  timeout: 20000,
+  // Reconnect automático
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionAttempts: 5
 }));
 const socketId = ref<string>('');
 const gameState = ref<GameState>({ 
@@ -80,6 +88,11 @@ onMounted(() => {
   socket.value.on('playersUpdate', (list: Player[]) => {
     players.value = list;
     console.log('[FRONTEND] playersUpdate recebido:', list.map(p => p.nickname));
+    // Se este jogador está na lista, marcar como joined
+    if (!joined.value && list.some(p => p.id === socketId.value)) {
+      console.log('[FRONTEND] Confirmação: jogador entrou no jogo!');
+      joined.value = true;
+    }
     // Verificar se este jogador ainda está na lista
     if (joined.value && !list.some(p => p.id === socketId.value)) {
       console.log('[FRONTEND] Jogador removido da lista!');
@@ -111,22 +124,42 @@ function joinGame(nickname: string) {
   console.log('[FRONTEND] socketConnected ref?', socketConnected.value);
   console.log('[FRONTEND] Socket ID:', socket.value.id);
   
-  // Garantir que está conectado antes de enviar
-  if (!socket.value.connected && !socketConnected.value) {
-    console.log('[FRONTEND] Socket não conectado ainda, aguardando...');
-    socket.value.once('connect', () => {
-      console.log('[FRONTEND] Socket conectou após aguardar, enviando joinGame');
-      socketId.value = socket.value.id || '';
-      socket.value.emit('joinGame', nickname);
-      console.log('[FRONTEND] Evento joinGame emitido (após aguardar conexão)');
-      joined.value = true;
-    });
-    return;
+  const sendJoinGame = () => {
+    if (!socket.value.connected) {
+      console.log('[FRONTEND] Socket não conectado, tentando aguardar...');
+      socket.value.once('connect', () => {
+        console.log('[FRONTEND] Socket conectou, enviando joinGame');
+        socketId.value = socket.value.id || '';
+        socket.value.emit('joinGame', nickname);
+        console.log('[FRONTEND] Evento joinGame emitido');
+      });
+      return;
+    }
+    
+    console.log('[FRONTEND] Emitindo joinGame agora...');
+    socket.value.emit('joinGame', nickname);
+    console.log('[FRONTEND] Evento joinGame emitido');
+    
+    // Verificar se foi recebido após um delay (workaround para eventos perdidos)
+    setTimeout(() => {
+      if (!joined.value && socket.value.connected) {
+        console.log('[FRONTEND] Ainda não entrou no jogo após 2s, tentando novamente...');
+        socket.value.emit('joinGame', nickname);
+        console.log('[FRONTEND] Evento joinGame reenviado');
+      }
+    }, 2000);
+  };
+  
+  // Aguardar um pouco para garantir que o socket está totalmente pronto
+  if (socket.value.connected) {
+    // Dar um pequeno delay mesmo estando conectado, para garantir que o handler está registrado no servidor
+    setTimeout(sendJoinGame, 100);
+  } else {
+    sendJoinGame();
   }
   
-  socket.value.emit('joinGame', nickname);
-  console.log('[FRONTEND] Evento joinGame emitido');
-  joined.value = true;
+  // Marcar como tentando entrar (mas não como joined ainda)
+  // joined.value será true quando receber playersUpdate confirmando entrada
 }
 
 function playCard(card: string) {
