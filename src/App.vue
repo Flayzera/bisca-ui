@@ -34,6 +34,7 @@ const socket = ref<Socket>(io(serverUrl, {
   transportOptions: {
     polling: { extraHeaders: { 'bypass-tunnel-reminder': '1' } }
   },
+  path: '/bisca-socket',
   // Forçar HTTP polling primeiro (mais estável no LocalTunnel) e desabilitar upgrade
   transports: ['polling'],
   upgrade: false,
