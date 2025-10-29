@@ -121,14 +121,14 @@ onMounted(() => {
     roomCapacity.value = payload.capacity;
     ownerId.value = socketId.value;
     console.log('[FRONTEND] Sala criada:', payload);
-    joined.value = true;
+    // joined fica true quando playersUpdate incluir este socket
   });
   socket.value.on('roomJoined', (payload: { roomId: string; capacity: number; ownerId: string }) => {
     roomId.value = payload.roomId;
     roomCapacity.value = payload.capacity;
     ownerId.value = payload.ownerId;
     console.log('[FRONTEND] Entrou na sala:', payload);
-    joined.value = true;
+    // joined fica true quando playersUpdate incluir este socket
   });
   socket.value.on('gameFinished', () => {
     alert('Jogo finalizado!');
