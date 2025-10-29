@@ -2,38 +2,67 @@
   <div class="join-container">
     <div class="icon-emoji">🎴</div>
     <h2 class="title">Bisca Online</h2>
-    <p class="description">
-      Entre com seu apelido para começar a jogar com seus amigos
-    </p>
-    
+    <p class="description">Escolha criar ou entrar em uma sala</p>
+
     <div class="form-group">
       <input
         v-model="nickname"
-        @keyup.enter="$emit('join', nickname)"
-        placeholder="Digite seu apelido"
+        placeholder="Seu apelido"
         class="input-field"
         autofocus
       />
-      <button
-        @click="$emit('join', nickname)"
-        :disabled="!nickname.trim()"
-        class="button"
-        :class="{ 'button-disabled': !nickname.trim() }"
-      >
-        🎮 Entrar no Jogo
-      </button>
+      <div class="button-row">
+        <button class="button" :class="{ 'button-disabled': !canContinue }" :disabled="!canContinue" @click="mode='join'">Entrar na sala</button>
+        <button class="button" :class="{ 'button-disabled': !canContinue }" :disabled="!canContinue" @click="mode='create'">Criar sala</button>
+      </div>
     </div>
-    
+
+    <div v-if="mode==='join'" class="form-group">
+      <input v-model="roomId" placeholder="ID da sala" class="input-field" />
+      <button class="button" :class="{ 'button-disabled': !canJoin }" :disabled="!canJoin" @click="emitJoin">➡️ Entrar</button>
+    </div>
+
+    <div v-if="mode==='create'" class="form-group">
+      <div class="select-row">
+        <label>Capacidade:</label>
+        <select v-model.number="capacity" class="select-field">
+          <option :value="2">2 jogadores</option>
+          <option :value="3">3 jogadores</option>
+          <option :value="4">4 jogadores</option>
+        </select>
+      </div>
+      <button class="button" @click="emitCreate">🆕 Criar sala</button>
+      <p class="hint">O dono pode iniciar com 2+ jogadores, mesmo se a capacidade for maior.</p>
+    </div>
+
     <div class="info-text">
-      <p>📋 Jogo para 2 ou 4 jogadores</p>
-      <p>🎯 Objetivo: Fazer mais pontos</p>
+      <p>📋 Jogo suporta 2 até 4 jogadores</p>
+      <p>👑 O dono inicia o jogo quando quiser (mínimo 2 jogadores)</p>
     </div>
   </div>
 </template>
 
 <script setup lang='ts'>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+const emit = defineEmits<{
+  (e: 'joinRoom', payload: { nickname: string; roomId: string }): void
+  (e: 'createRoom', payload: { nickname: string; capacity: number }): void
+}>()
+
 const nickname = ref('');
+const mode = ref<'join' | 'create' | ''>('');
+const roomId = ref('');
+const capacity = ref(4);
+const canContinue = computed(() => nickname.value.trim().length > 0);
+const canJoin = computed(() => canContinue.value && roomId.value.trim().length > 0);
+
+function emitJoin() {
+  emit('joinRoom', { nickname: nickname.value.trim(), roomId: roomId.value.trim() });
+}
+function emitCreate() {
+  let cap = Math.max(2, Math.min(4, Math.floor(capacity.value)));
+  emit('createRoom', { nickname: nickname.value.trim(), capacity: cap });
+}
 </script>
 
 <style scoped>
@@ -71,6 +100,12 @@ const nickname = ref('');
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 .input-field {
@@ -116,6 +151,27 @@ const nickname = ref('');
   color: #cbd5e1;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.select-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.select-field {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 2px solid rgb(22, 163, 74);
+  background-color: white;
+}
+
+.hint {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
 }
 
 .info-text {
