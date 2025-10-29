@@ -46,15 +46,34 @@ onMounted(() => {
   
   socket.value.on('gameState', (state: GameState) => {
     gameState.value = state;
+    // Se o jogo foi resetado e não há jogadores, volta para a tela de join
+    if (!state.isGameStarted && state.players.length === 0) {
+      joined.value = false;
+    }
   });
-  socket.value.on('playersUpdate', (list: Player[]) => (players.value = list));
-  socket.value.on('roomFull', () => alert('A sala já está cheia (máximo de 4 jogadores)'));
-  socket.value.on('gameStarted', () => console.log('Jogo iniciado!'));
-  socket.value.on('gameFinished', () => alert('Jogo finalizado!'));
+  socket.value.on('playersUpdate', (list: Player[]) => {
+    players.value = list;
+    // Verificar se este jogador ainda está na lista
+    if (joined.value && !list.some(p => p.id === socketId.value)) {
+      joined.value = false;
+    }
+  });
+  socket.value.on('roomFull', () => {
+    alert('A sala já está cheia (máximo de 4 jogadores)');
+    joined.value = false;
+  });
+  socket.value.on('gameStarted', () => {
+    console.log('Jogo iniciado!');
+  });
+  socket.value.on('gameFinished', () => {
+    alert('Jogo finalizado!');
+    joined.value = false;
+  });
 });
 
 function joinGame(nickname: string) {
   if (!nickname) return alert('Digite um apelido!');
+  if (joined.value) return; // Já está no jogo
   socket.value.emit('joinGame', nickname);
   joined.value = true;
 }
