@@ -2,9 +2,15 @@
   <div class="app-container">
     <h1 class="main-title">Bisca Online 🎴</h1>
 
-    <JoinForm v-if="!joined" @join="joinGame" />
+    <JoinForm v-if="!joined" @createRoom="createRoom" @joinRoom="joinRoom" />
 
     <div v-else class="game-container">
+      <div style="margin-bottom: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <div>Room: <strong>{{ roomId || 'lobby' }}</strong> (cap: {{ roomCapacity || 4 }})</div>
+        <div v-if="isOwner" style="display: inline-flex; gap: 8px; align-items: center;">
+          <button @click="startRoom" style="padding: 6px 10px;">Iniciar jogo</button>
+        </div>
+      </div>
       <GameTable 
         :gameState="gameState" 
         :players="players"
@@ -16,7 +22,7 @@
 </template>
 
 <script setup lang='ts'>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { io, Socket } from 'socket.io-client';
 import GameTable from './components/GameTable.vue';
 import JoinForm from './components/JoinForm.vue';
@@ -55,6 +61,10 @@ const gameState = ref<GameState>({
 });
 const players = ref<Player[]>([]);
 const joined = ref(false);
+const roomId = ref<string>('');
+const roomCapacity = ref<number>(4);
+const ownerId = ref<string>('');
+const isOwner = computed(() => ownerId.value && ownerId.value === socketId.value);
 
 const socketConnected = ref(false);
 
@@ -106,64 +116,58 @@ onMounted(() => {
   socket.value.on('gameStarted', () => {
     console.log('Jogo iniciado!');
   });
+  socket.value.on('roomCreated', (payload: { roomId: string; capacity: number }) => {
+    roomId.value = payload.roomId;
+    roomCapacity.value = payload.capacity;
+    ownerId.value = socketId.value;
+    console.log('[FRONTEND] Sala criada:', payload);
+    joined.value = true;
+  });
+  socket.value.on('roomJoined', (payload: { roomId: string; capacity: number; ownerId: string }) => {
+    roomId.value = payload.roomId;
+    roomCapacity.value = payload.capacity;
+    ownerId.value = payload.ownerId;
+    console.log('[FRONTEND] Entrou na sala:', payload);
+    joined.value = true;
+  });
   socket.value.on('gameFinished', () => {
     alert('Jogo finalizado!');
     joined.value = false;
   });
 });
 
-function joinGame(nickname: string) {
-  if (!nickname) return alert('Digite um apelido!');
-  if (joined.value) {
-    console.log('[FRONTEND] Tentativa de join ignorada - já está no jogo');
-    return; // Já está no jogo
-  }
-  
-  console.log('[FRONTEND] Tentando entrar no jogo:', nickname);
-  console.log('[FRONTEND] Socket conectado?', socket.value.connected);
-  console.log('[FRONTEND] socketConnected ref?', socketConnected.value);
-  console.log('[FRONTEND] Socket ID:', socket.value.id);
-  
-  const sendJoinGame = () => {
-    if (!socket.value.connected) {
-      console.log('[FRONTEND] Socket não conectado, tentando aguardar...');
-      socket.value.once('connect', () => {
-        console.log('[FRONTEND] Socket conectou, enviando joinGame');
-        socketId.value = socket.value.id || '';
-        socket.value.emit('joinGame', nickname);
-        console.log('[FRONTEND] Evento joinGame emitido');
-      });
-      return;
-    }
-    
-    console.log('[FRONTEND] Emitindo joinGame agora...');
-    socket.value.emit('joinGame', nickname);
-    console.log('[FRONTEND] Evento joinGame emitido');
-    
-    // Verificar se foi recebido após um delay (workaround para eventos perdidos)
-    setTimeout(() => {
-      if (!joined.value && socket.value.connected) {
-        console.log('[FRONTEND] Ainda não entrou no jogo após 2s, tentando novamente...');
-        socket.value.emit('joinGame', nickname);
-        console.log('[FRONTEND] Evento joinGame reenviado');
-      }
-    }, 2000);
+function createRoom(payload: { nickname: string; capacity: number }) {
+  if (!payload.nickname) return alert('Digite um apelido!');
+  const tryEmit = (fn: () => void) => {
+    if (socket.value.connected) return fn();
+    socket.value.once('connect', fn);
   };
-  
-  // Aguardar um pouco para garantir que o socket está totalmente pronto
-  if (socket.value.connected) {
-    // Dar um pequeno delay mesmo estando conectado, para garantir que o handler está registrado no servidor
-    setTimeout(sendJoinGame, 100);
-  } else {
-    sendJoinGame();
-  }
-  
-  // Marcar como tentando entrar (mas não como joined ainda)
-  // joined.value será true quando receber playersUpdate confirmando entrada
+  tryEmit(() => {
+    socketId.value = socket.value.id || '';
+    socket.value.emit('createRoom', { capacity: payload.capacity, nickname: payload.nickname });
+  });
+}
+
+function joinRoom(payload: { nickname: string; roomId: string }) {
+  if (!payload.nickname) return alert('Digite um apelido!');
+  if (!payload.roomId) return alert('Informe o ID da sala!');
+  const tryEmit = (fn: () => void) => {
+    if (socket.value.connected) return fn();
+    socket.value.once('connect', fn);
+  };
+  tryEmit(() => {
+    socketId.value = socket.value.id || '';
+    socket.value.emit('joinRoom', { roomId: payload.roomId, nickname: payload.nickname });
+  });
 }
 
 function playCard(card: string) {
   socket.value.emit('playCard', card);
+}
+
+function startRoom() {
+  if (!roomId.value) return;
+  socket.value.emit('startRoom', { roomId: roomId.value });
 }
 </script>
 
