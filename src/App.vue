@@ -204,9 +204,6 @@ onMounted(() => {
   
   socket.value.on('gameState', (state: GameState) => {
     gameState.value = state;
-    if (!state.isGameStarted && state.players.length === 0) {
-      joined.value = false;
-    }
   });
   
   socket.value.on('playersUpdate', (list: Player[]) => {
@@ -255,10 +252,7 @@ onMounted(() => {
     // Não marcar joined aqui, esperar playersUpdate
   });
   
-  socket.value.on('gameFinished', () => {
-    alert('Jogo finalizado!');
-    joined.value = false;
-  });
+  // Removido: manter usuário na sala para ver os overlays de fim de partida/série
 
   socket.value.on('trickWon', (payload: { winnerId: string; winnerNickname: string; cards: any[]; roundNumber: number }) => {
     console.log('[FRONTEND] Vaza vencida por', payload.winnerNickname, 'na rodada', payload.roundNumber);
