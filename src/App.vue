@@ -19,6 +19,42 @@
         :trickBanner="trickBanner"
         @playCard="playCard" 
       />
+
+      <div v-if="roundSummary" class="overlay">
+        <div class="overlay-card">
+          <h3>🏁 Fim da partida</h3>
+          <p><strong>Trunfo:</strong> {{ prettyCard(roundSummary.trumpCard) }}</p>
+          <div class="list-block">
+            <h4>Pontuação</h4>
+            <ul>
+              <li v-for="s in roundSummary.scoresSorted" :key="s.id">{{ s.nickname }}: {{ s.score }} pts</li>
+            </ul>
+          </div>
+          <div class="list-block" v-if="roundSummary.chipsAwarded.length">
+            <h4>Fichas</h4>
+            <ul>
+              <li v-for="c in roundSummary.chipsAwarded" :key="c.playerId">
+                {{ getNickname(c.playerId) }}: +{{ c.delta }} — {{ c.reasons.map(ruleLabel).join(', ') }}
+              </li>
+            </ul>
+          </div>
+          <button @click="closeRoundSummary">OK</button>
+        </div>
+      </div>
+
+      <div v-if="matchSummary" class="overlay">
+        <div class="overlay-card">
+          <h3>🥇 Fim da série</h3>
+          <p><strong>Vencedor(es):</strong> {{ matchSummary.winners.map(w => w.nickname + ' ('+ w.chips +')').join(', ') }}</p>
+          <div class="list-block">
+            <h4>Ranking</h4>
+            <ul>
+              <li v-for="s in matchSummary.standingsSorted" :key="s.id">{{ s.nickname }}: {{ s.chips }} fichas</li>
+            </ul>
+          </div>
+          <button @click="closeMatchSummary">OK</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -75,6 +111,15 @@ const ownerId = ref<string>('');
 const totalRounds = ref<number | null>(null);
 const trickBanner = ref<string>('');
 const isOwner = computed(() => ownerId.value && ownerId.value === socketId.value);
+const roundSummary = ref<null | {
+  scoresSorted: { id: string; nickname: string; score: number }[];
+  chipsAwarded: { playerId: string; delta: number; reasons: string[] }[];
+  trumpCard: string;
+}>(null);
+const matchSummary = ref<null | {
+  winners: { id: string; nickname: string; chips: number }[];
+  standingsSorted: { id: string; nickname: string; chips: number }[];
+}>(null);
 
 onMounted(() => {
   console.log('[FRONTEND] onMounted - Socket estado:', socket.value.connected ? 'conectado' : 'desconectado');
@@ -221,19 +266,19 @@ onMounted(() => {
     setTimeout(() => { trickBanner.value = ''; }, 2000);
   });
 
-  socket.value.on('roundFinished', (payload: { scores: { id: string; nickname: string; score: number }[]; chipsAwarded: { playerId: string; delta: number }[]; totalChips: { id: string; nickname: string; chips: number }[]; trumpCard: string }) => {
-    const winners = payload.scores.sort((a,b)=>b.score-a.score);
-    const top = winners[0];
-    const chipsMsg = payload.chipsAwarded.map(c => {
-      const p = payload.totalChips.find(t => t.id === c.playerId);
-      return `${p?.nickname || ''}: +${c.delta} (total ${p?.chips ?? 0})`;
-    }).join('\n');
-    alert(`Rodada finalizada!\nMaior pontuação: ${top.nickname} (${top.score})\n\nFichas:\n${chipsMsg || '—'}`);
+  socket.value.on('roundFinished', (payload: { scores: { id: string; nickname: string; score: number }[]; chipsAwarded: { playerId: string; delta: number; reasons: string[] }[]; totalChips: { id: string; nickname: string; chips: number }[]; trumpCard: string }) => {
+    roundSummary.value = {
+      scoresSorted: [...payload.scores].sort((a,b)=>b.score-a.score),
+      chipsAwarded: payload.chipsAwarded,
+      trumpCard: payload.trumpCard,
+    };
   });
 
   socket.value.on('matchFinished', (payload: { winners: { id: string; nickname: string; chips: number }[]; standings: { id: string; nickname: string; chips: number }[] }) => {
-    const winnerNames = payload.winners.map(w => `${w.nickname} (${w.chips})`).join(', ');
-    alert(`Partida encerrada! Vencedor(es): ${winnerNames}`);
+    matchSummary.value = {
+      winners: payload.winners,
+      standingsSorted: [...payload.standings].sort((a,b)=>b.chips-a.chips),
+    };
   });
 });
 
@@ -312,6 +357,32 @@ function startRoom() {
   if (!roomId.value) return;
   socket.value.emit('startRoom', { roomId: roomId.value });
 }
+
+function getNickname(id: string): string {
+  return players.value.find(p => p.id === id)?.nickname || '—';
+}
+
+function ruleLabel(key: string): string {
+  const map: Record<string, string> = {
+    captured_trump_2: 'tirou 2 do trunfo',
+    captured_both_trump_A_7: 'capturou A e 7 do trunfo',
+    played_trump_A_and_captured_opponent_trump_7: 'jogou A do trunfo e pegou 7 do adversário',
+    king_of_trunfo_last_trick: 'rei do trunfo na última',
+    king_of_trump_last_trick: 'rei do trunfo na última',
+    highest_score: 'maior pontuação',
+  };
+  return map[key] || key;
+}
+
+function prettyCard(card: string): string {
+  const suit = card.slice(-1);
+  const value = card.slice(0, -1);
+  const suitMap: Record<string, string> = { S: '♠', H: '♥', D: '♦', C: '♣' };
+  return value + suitMap[suit];
+}
+
+function closeRoundSummary() { roundSummary.value = null; }
+function closeMatchSummary() { matchSummary.value = null; }
 </script>
 
 <style scoped>
@@ -335,5 +406,36 @@ function startRoom() {
 
 .game-container {
   width: 100%;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.overlay-card {
+  background: white;
+  color: black;
+  padding: 20px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.list-block h4 {
+  margin: 0 0 6px 0;
+}
+
+.overlay-card button {
+  align-self: flex-end;
+  padding: 8px 12px;
 }
 </style>
