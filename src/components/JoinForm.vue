@@ -31,6 +31,15 @@
           <option :value="4">4 jogadores</option>
         </select>
       </div>
+      <div class="select-row">
+        <label>Rodadas:</label>
+        <select v-model.number="rounds" class="select-field">
+          <option :value="1">1</option>
+          <option :value="3">3</option>
+          <option :value="5">5</option>
+          <option :value="7">7</option>
+        </select>
+      </div>
       <button class="button" @click="emitCreate">🆕 Criar sala</button>
       <p class="hint">O dono pode iniciar com 2+ jogadores, mesmo se a capacidade for maior.</p>
     </div>
@@ -46,13 +55,14 @@
 import { ref, computed } from 'vue';
 const emit = defineEmits<{
   (e: 'joinRoom', payload: { nickname: string; roomId: string }): void
-  (e: 'createRoom', payload: { nickname: string; capacity: number }): void
+  (e: 'createRoom', payload: { nickname: string; capacity: number; totalRounds?: number }): void
 }>()
 
 const nickname = ref('');
 const mode = ref<'join' | 'create' | ''>('');
 const roomId = ref('');
 const capacity = ref(4);
+const rounds = ref(3);
 const canContinue = computed(() => nickname.value.trim().length > 0);
 const canJoin = computed(() => canContinue.value && roomId.value.trim().length > 0);
 
@@ -61,7 +71,8 @@ function emitJoin() {
 }
 function emitCreate() {
   let cap = Math.max(2, Math.min(4, Math.floor(capacity.value)));
-  emit('createRoom', { nickname: nickname.value.trim(), capacity: cap });
+  const totalRounds = Math.max(1, Math.min(20, Math.floor(rounds.value)));
+  emit('createRoom', { nickname: nickname.value.trim(), capacity: cap, totalRounds });
 }
 </script>
 
