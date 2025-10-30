@@ -7,6 +7,7 @@
     <div v-else class="game-container">
       <div style="margin-bottom: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
         <div>Room: <strong>{{ roomId || 'lobby' }}</strong> (cap: {{ roomCapacity || 4 }})</div>
+        <div v-if="totalRounds">Rodadas: <strong>{{ totalRounds }}</strong></div>
         <div v-if="isOwner" style="display: inline-flex; gap: 8px; align-items: center;">
           <button @click="startRoom" style="padding: 6px 10px;">Iniciar jogo</button>
         </div>
@@ -15,6 +16,7 @@
         :gameState="gameState" 
         :players="players"
         :socketId="socketId"
+        :trickBanner="trickBanner"
         @playCard="playCard" 
       />
     </div>
@@ -70,6 +72,8 @@ const joined = ref(false);
 const roomId = ref<string>('');
 const roomCapacity = ref<number>(4);
 const ownerId = ref<string>('');
+const totalRounds = ref<number | null>(null);
+const trickBanner = ref<string>('');
 const isOwner = computed(() => ownerId.value && ownerId.value === socketId.value);
 
 onMounted(() => {
@@ -189,10 +193,11 @@ onMounted(() => {
     console.log('[FRONTEND] Jogo iniciado');
   });
   
-  socket.value.on('roomCreated', (payload: { roomId: string; capacity: number }) => {
+  socket.value.on('roomCreated', (payload: { roomId: string; capacity: number; totalRounds?: number }) => {
     roomId.value = payload.roomId;
     roomCapacity.value = payload.capacity;
     ownerId.value = socketId.value;
+    totalRounds.value = payload.totalRounds ?? null;
     console.log('[FRONTEND] Sala criada:', payload.roomId);
     // Não marcar joined aqui, esperar playersUpdate
   });
@@ -208,6 +213,27 @@ onMounted(() => {
   socket.value.on('gameFinished', () => {
     alert('Jogo finalizado!');
     joined.value = false;
+  });
+
+  socket.value.on('trickWon', (payload: { winnerId: string; winnerNickname: string; cards: any[]; roundNumber: number }) => {
+    console.log('[FRONTEND] Vaza vencida por', payload.winnerNickname, 'na rodada', payload.roundNumber);
+    trickBanner.value = `Vaza ${payload.roundNumber}: ${payload.winnerNickname} venceu!`;
+    setTimeout(() => { trickBanner.value = ''; }, 2000);
+  });
+
+  socket.value.on('roundFinished', (payload: { scores: { id: string; nickname: string; score: number }[]; chipsAwarded: { playerId: string; delta: number }[]; totalChips: { id: string; nickname: string; chips: number }[]; trumpCard: string }) => {
+    const winners = payload.scores.sort((a,b)=>b.score-a.score);
+    const top = winners[0];
+    const chipsMsg = payload.chipsAwarded.map(c => {
+      const p = payload.totalChips.find(t => t.id === c.playerId);
+      return `${p?.nickname || ''}: +${c.delta} (total ${p?.chips ?? 0})`;
+    }).join('\n');
+    alert(`Rodada finalizada!\nMaior pontuação: ${top.nickname} (${top.score})\n\nFichas:\n${chipsMsg || '—'}`);
+  });
+
+  socket.value.on('matchFinished', (payload: { winners: { id: string; nickname: string; chips: number }[]; standings: { id: string; nickname: string; chips: number }[] }) => {
+    const winnerNames = payload.winners.map(w => `${w.nickname} (${w.chips})`).join(', ');
+    alert(`Partida encerrada! Vencedor(es): ${winnerNames}`);
   });
 });
 
@@ -240,7 +266,7 @@ async function ensureConnected(): Promise<boolean> {
   });
 }
 
-function createRoom(payload: { nickname: string; capacity: number }) {
+function createRoom(payload: { nickname: string; capacity: number; totalRounds?: number }) {
   if (!payload.nickname) {
     alert('Digite um apelido!');
     return;
@@ -249,7 +275,7 @@ function createRoom(payload: { nickname: string; capacity: number }) {
   
   ensureConnected().then((connected) => {
     if (connected) {
-      socket.value.emit('createRoom', { capacity: payload.capacity, nickname: payload.nickname });
+      socket.value.emit('createRoom', { capacity: payload.capacity, nickname: payload.nickname, totalRounds: payload.totalRounds });
       console.log('[FRONTEND] Evento createRoom emitido');
     } else {
       alert('Não foi possível conectar ao servidor. Tente novamente.');
