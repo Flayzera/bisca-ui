@@ -4,6 +4,7 @@ export interface Player {
   hand: string[];
   score: number;
   capturedCards: string[];
+  chips?: number;
 }
 
 export interface TablePlay {
@@ -20,4 +21,6 @@ export interface GameState {
   deck: string[];
   roundNumber: number;
   isGameStarted: boolean;
+  lastTrickWinnerId?: string;
+  lastTrickCards?: TablePlay[];
 }
