@@ -20,6 +20,13 @@
         @playCard="playCard" 
       />
 
+      <div class="logs-panel">
+        <h4>Logs</h4>
+        <div class="logs-list">
+          <div v-for="item in roomLogs" :key="item.ts" class="log-item">{{ formatLog(item) }}</div>
+        </div>
+      </div>
+
       <div v-if="roundSummary" class="overlay">
         <div class="overlay-card">
           <h3>🏁 Fim da partida</h3>
@@ -120,6 +127,7 @@ const matchSummary = ref<null | {
   winners: { id: string; nickname: string; chips: number }[];
   standingsSorted: { id: string; nickname: string; chips: number }[];
 }>(null);
+const roomLogs = ref<{ ts: number; text: string; type?: string }[]>([]);
 
 onMounted(() => {
   console.log('[FRONTEND] onMounted - Socket estado:', socket.value.connected ? 'conectado' : 'desconectado');
@@ -274,6 +282,18 @@ onMounted(() => {
       standingsSorted: [...payload.standings].sort((a,b)=>b.chips-a.chips),
     };
   });
+
+  socket.value.on('roomLog', (entry: { ts: number; text: string; type?: string }) => {
+    roomLogs.value = [...roomLogs.value, entry].slice(-200);
+  });
+
+  socket.value.on('chipsAwarded', (payload: { awards: { playerId: string; delta: number; reasons: string[] }[] }) => {
+    // Optional: could also push a formatted log per award
+    payload.awards.forEach(a => {
+      roomLogs.value.push({ ts: Date.now(), text: `${getNickname(a.playerId)} ganhou +${a.delta} ficha(s): ${a.reasons.map(ruleLabel).join(', ')}`, type: 'chips' });
+    });
+    roomLogs.value = roomLogs.value.slice(-200);
+  });
 });
 
 // Helper para garantir que o socket esteja conectado antes de emitir
@@ -377,6 +397,13 @@ function prettyCard(card: string): string {
 
 function closeRoundSummary() { roundSummary.value = null; }
 function closeMatchSummary() { matchSummary.value = null; }
+
+function formatLog(entry: { ts: number; text: string }) {
+  const d = new Date(entry.ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `[${hh}:${mm}] ${entry.text}`;
+}
 </script>
 
 <style scoped>
@@ -400,6 +427,31 @@ function closeMatchSummary() { matchSummary.value = null; }
 
 .game-container {
   width: 100%;
+}
+
+.logs-panel {
+  margin-top: 16px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.logs-panel h4 {
+  margin: 0 0 8px 0;
+}
+
+.logs-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-item {
+  font-size: 0.9rem;
+  opacity: 0.95;
 }
 
 .overlay {
