@@ -3,6 +3,9 @@
     <div v-if="isMyTurn && gameState.isGameStarted" class="your-turn-alert">
       <h2>🎯 SUA VEZ DE JOGAR!</h2>
     </div>
+    <div v-if="trickBanner" class="trick-banner">
+      <strong>{{ trickBanner }}</strong>
+    </div>
 
     <div class="game-layout">
       <div class="left-panel">
@@ -39,6 +42,7 @@
             >
               <span class="player-name-compact">{{ player.nickname }}</span>
               <span class="player-score-compact">{{ player.score }} pts</span>
+              <span class="player-score-compact" v-if="player.chips !== undefined">💠 {{ player.chips }}</span>
               <span v-if="gameState.isGameStarted" class="player-cards-compact">
                 {{ player.hand.length }} na mão
               </span>
@@ -136,6 +140,7 @@ const props = defineProps<{
   gameState: GameState;
   players: Player[];
   socketId: string;
+  trickBanner?: string;
 }>();
 
 const emit = defineEmits<{
@@ -257,6 +262,16 @@ function playCard(card: string) {
   animation: pulse 2s infinite;
   border: 4px solid #facc15;
   box-shadow: 0 6px 18px rgba(250, 204, 21, 0.55);
+}
+
+.trick-banner {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  padding: 12px;
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 8px;
+  box-shadow: 0 6px 18px rgba(22, 163, 74, 0.45);
 }
 
 .your-turn-alert h2 {
