@@ -53,24 +53,6 @@
           </div>
         </div>
 
-        <div v-if="gameState.isGameStarted" class="captured-cards-section">
-          <h4>🏆 Cartas Capturadas</h4>
-          <div class="captured-players">
-            <div v-for="player in gameState.players" :key="player.id + '-captured'" 
-                 class="captured-player"
-                 :class="{ 'captured-self': player.id === socketId }">
-              <strong>{{ player.nickname }}:</strong>
-              <div v-if="player.capturedCards && player.capturedCards.length > 0" class="captured-cards-list">
-                <span class="captured-card-mini" v-for="card in player.capturedCards" :key="card"
-                      :class="getSuitColorClass(card)">
-                  {{ getCardDisplay(card) }}
-                </span>
-              </div>
-              <span v-else class="no-captures">Nenhuma</span>
-            </div>
-          </div>
-        </div>
-
         
       </div>
 
